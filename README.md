@@ -8,6 +8,7 @@
 * [Maven Profiles](#maven-profiles)
     * [Integration tests](#integration-tests)
 * [How to run it](#how-to-run-it)
+* [How to check the results](#how-to-check-the-results)
 
 ## What is it?
 
@@ -97,4 +98,23 @@ Go to the root folder of the project and run the following commands:
 ```
 java -jar cli/target/benchmark-<version>.jar -h
 ```
+The main options are:  
+- --benchmark-target: Can be `mongo` or `postgres`
+- --target-database-host hostname (or ip address) of the database host
+- --min-connections: Minimum amount of connections to keep 
+- --max-connections: Maximum amount of connections available
+- --duration: Length (in seconds) of the test.
+- --metrics: Interval to show accumulated metrics
+- --day-range: Integer. When running with high parallellism, a lower number of `day-range` will make _collisions_ of request more likely
 
+Use with `--help` to get a list of all the available options.
+
+## How to check the results
+Once execution is over, three files emerges as a result:
+- iterations.csv
+- response-time.csv
+- retries.csv
+
+_Iterations.csv_ shows the number of movements of each interval  
+_Response-time.csv_ show some statistic data about execution times  
+_Retries.csv_ shows the total transaction retries for each interval (in the case of PostgreSQL, this only shows when used with `--sql-isolation-level=SERIALIZABLE`)
