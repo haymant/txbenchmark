@@ -34,15 +34,19 @@ import org.junit.jupiter.api.Test;
 @DockerExtension({
     @DockerContainer(
       alias = "mongo",
-      image = "mongo:4",
-      ports = { @Port(internal = 27017) },
+      image = "mongo:6",
+      ports = { @Port(internal = 27017, external = 27017) },
       arguments = { "bash", "-c", 
-          "(docker-entrypoint.sh mongod --replSet rs0) &"
-              + " while ! mongo --eval 'rs.initiate()'"
-              + "   > /dev/null 2>&1; do sleep 1; done;"
+          "(docker-entrypoint.sh mongod --bind_ip_all --replSet rs0) &"
+              + " echo 'Initiating';"
+              + " while ! mongosh --eval 'rs.initiate()'"
+              + "    ; do sleep 1; done;"
+              + " echo 'Adding Node';"
+              + " while ! mongosh --eval 'rs.add(\"mongo:27017\")'"
+              + "    ; do sleep 1; done;"
               + " for i in 1 2 3; do"
-              + "   while ! mongo --eval 'db.getCollectionNames()'"
-              + "     > /dev/null 2>&1; do sleep 1; done;"
+              + "   while ! mongosh --eval 'db.getCollectionNames()'"
+              + "     ; do sleep 1; done;"
               + " sleep 1; done;"
               + " echo 'MongoDB is ready!';"
               + " seq -s ' ' 10000000 10000910;"

@@ -25,6 +25,7 @@ import com.ongres.junit.docker.Container;
 import com.ongres.junit.docker.ContainerParam;
 import com.ongres.junit.docker.DockerContainer;
 import com.ongres.junit.docker.DockerExtension;
+import com.ongres.junit.docker.Environment;
 import com.ongres.junit.docker.Port;
 import com.ongres.junit.docker.WaitFor;
 import com.ongres.junit.docker.WhenReuse;
@@ -34,8 +35,9 @@ import org.junit.jupiter.api.Test;
 @DockerExtension({
     @DockerContainer(
         alias = "postgres",
-        image = "postgres:11",
+        image = "postgres:15",
         ports = { @Port(internal = 5432) },
+        environments = { @Environment(key = "POSTGRES_HOST_AUTH_METHOD", value = "trust")},
         arguments = { "bash", "-c", 
             "(docker-entrypoint.sh postgres) &"
                 + " for i in 1 2 3; do"
@@ -49,7 +51,6 @@ import org.junit.jupiter.api.Test;
         whenReuse = WhenReuse.ALWAYS)
 })
 public class PostgresBenchmarkIt {
-
   @Test
   public void benchmarkTest(@ContainerParam("postgres") Container postgres) throws Exception {
     App.test(
