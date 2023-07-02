@@ -118,3 +118,69 @@ Once execution is over, three files emerges as a result:
 _Iterations.csv_ shows the number of movements of each interval  
 _Response-time.csv_ show some statistic data about execution times  
 _Retries.csv_ shows the total transaction retries for each interval (in the case of PostgreSQL, this only shows when used with `--sql-isolation-level=SERIALIZABLE`)
+
+# Postgres setup on Ubuntu
+
+```bash
+sudo apt update && sudo apt upgrade
+sudo apt install postgresql postgresql-contrib
+
+sudo systemctl start postgresql
+sudo systemctl status postgresql
+sudo vim /etc/postgresql/15/main/postgresql.conf
+#Add row
+#listen_addresses = '*'
+sudo vim /etc/postgresql/15/main/pg_hba.conf
+# update host row
+host    all             all             0.0.0.0/0            scram-sha-256
+sudo systemctl restart postgresql
+sudo systemctl status postgresql
+sudo -i -u postgres
+#create user bench
+createuser --interactive
+#create DB for benchmark
+createdb -O bench benchmark
+psql
+#update pwd
+alter role bench with password 'bench';
+#verify
+psql -U bench -h localhost -d benchmark
+#Benchmark
+java -jar cli/target/benchmark-1.3.jar \
+  --benchmark-target postgres --parallelism 20 \
+  --target-database-host localhost --target-database-port 5432 \
+  --target-database-user bench --target-database-name benchmark \
+  --target-database-password bench \
+  --duration PT120S --metrics "PT10S" --metrics-reporter csv 
+```
+
+# MongoDB setup on Ubuntu
+
+```bash
+sudo apt-get install gnupg
+curl -fsSL https://pgp.mongodb.com/server-6.0.asc | \
+   sudo gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg \
+   --dearmor
+echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+sudo apt update
+sudo apt-get install -y mongodb-org
+vim /etc/mongod.conf
+# configure as replicate set, add
+replication:
+  replSetName: "rs0"
+# start
+sudo systemctl start mongod
+sudo systemctl status mongod
+mongosh
+> rs.initiate();
+> use benchmark;
+> db.createUser( {user: 'bench', pwd: passwordPrompt(), roles: [{role: 'readWrite', db:'benchmark'}]});
+# verify
+mongosh localhost:27017/benchmark -u bench
+java -jar cli/target/benchmark-1.3.jar \
+  --benchmark-target mongo --parallelism 20 \
+  --target-database-host localhost --target-database-port 27017 \
+  --target-database-user bench  --target-database-name benchmark \
+  --target-database-password bench \
+  --duration PT120S --metrics "PT10S" --metrics-reporter csv
+```

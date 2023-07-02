@@ -346,7 +346,7 @@ public class App  extends Options implements Callable<Void> {
                 + ":" + getConfig().getTarget().getDatabase().getPassword()
                 + "@")
             + getConfig().getTarget().getDatabase().getHost() 
-            + ":" + getConfig().getTarget().getDatabase().getPort()))
+            + ":" + getConfig().getTarget().getDatabase().getPort() + "/benchmark")  )
         .applyToConnectionPoolSettings(builder -> builder
             .minSize(getConfig().getMinConnections())
             .maxSize(getConfig().getMaxConnections())

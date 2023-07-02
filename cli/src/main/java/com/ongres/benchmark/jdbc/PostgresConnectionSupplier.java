@@ -37,9 +37,9 @@ public class PostgresConnectionSupplier extends AbstractPoolableConnectionSuppli
   @Override
   protected String getJdbcUrl(Properties jdbcDriverProperties) {
     return "jdbc:postgresql://"
-        + PGProperty.PG_HOST.get(jdbcDriverProperties) + ":"
-        + PGProperty.PG_PORT.get(jdbcDriverProperties) + "/"
-        + PGProperty.PG_DBNAME.get(jdbcDriverProperties);
+        + PGProperty.PG_HOST.getOrDefault(jdbcDriverProperties) + ":"
+        + PGProperty.PG_PORT.getOrDefault(jdbcDriverProperties) + "/"
+        + PGProperty.PG_DBNAME.getOrDefault(jdbcDriverProperties);
   }
 
   @Override
