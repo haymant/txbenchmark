@@ -150,14 +150,20 @@ public class App  extends Options implements Callable<Void> {
 
       final BenchmarkRunner benchmark;
       
-      if (getConfig().getTargetType().equals("mongo")) {
-        benchmark = createMongoBenchmark(closer);
-      } else if (getConfig().getTargetType().equals("postgres")) {
-        benchmark = createPostgresBenchmark(closer);
-      } else {
-        throw new IllegalArgumentException("Unknown benchmark target type " 
-            + getConfig().getTargetType() + ". Must be postgres or mongo");
-      }
+		switch (getConfig().getTargetType()) {
+		case "mongo":
+			benchmark = createMongoBenchmark(closer);
+			break;
+		case "postgres":
+			benchmark = createPostgresBenchmark(closer);
+			break;
+		case "pDW":
+			benchmark = createPostgresDWBenchmark(closer);
+			break;
+		default:
+			throw new IllegalArgumentException(
+					"Unknown benchmark target type " + getConfig().getTargetType() + ". Must be postgres/pDW/mongo/mDW");
+		}
       
       if (!getConfig().isSkipSetup()) {
         logger.info("Benchmark setup");
@@ -337,6 +343,36 @@ public class App  extends Options implements Callable<Void> {
     closer.register(() -> Unchecked.runnable(() -> benchmark.close()).run());
     return new BenchmarkRunner(benchmark);
   }
+  
+  private BenchmarkRunner createPostgresDWBenchmark(Closer closer) {
+	    Properties jdbcProperties = new Properties();
+	    PGProperty.PG_HOST.set(jdbcProperties, getConfig().getTarget().getDatabase().getHost());
+	    PGProperty.PG_PORT.set(jdbcProperties, getConfig().getTarget().getDatabase().getPort());
+	    PGProperty.PG_DBNAME.set(jdbcProperties, getConfig().getTarget().getDatabase().getName());
+	    PGProperty.USER.set(jdbcProperties, getConfig().getTarget().getDatabase().getUser());
+	    PGProperty.PASSWORD.set(jdbcProperties, getConfig().getTarget().getDatabase().getPassword());
+	    HikariConfig config = new HikariConfig();
+	    config.setMinimumIdle(getConfig().getMinConnections());
+	    config.setMaximumPoolSize(getConfig().getMaxConnections());
+	    config.setConnectionTimeout(getConfig().getConnectionWaitTimeoutAsDuration().toMillis());
+	    config.setIdleTimeout(getConfig().getConnectionIdleTimeoutAsDuration().toMillis());
+	    ConnectionSupplier connectionSupplier =
+	        new HikariConnectionSupplier(new PostgresConnectionSupplier(jdbcProperties) {
+	          @Override
+	          public boolean isAutoCommit() {
+	            return getConfig().isDisableTransaction();
+	          }
+
+	          @Override
+	          public int getTransactionIsolationLevel() {
+	            return getConfig().getSqlIsolationLevelAsInt();
+	          }
+	        }, config);
+	    PostgresDWBenchmark benchmark = PostgresDWBenchmark.create(connectionSupplier,
+	        getConfig());
+	    closer.register(() -> Unchecked.runnable(() -> benchmark.close()).run());
+	    return new BenchmarkRunner(benchmark);
+	  }
 
   private BenchmarkRunner createMongoBenchmark(Closer closer) {
     MongoClient client = MongoClients.create(MongoClientSettings.builder()
