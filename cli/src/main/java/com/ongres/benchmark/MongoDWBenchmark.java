@@ -37,6 +37,8 @@ import com.mongodb.client.model.Projections;
 import com.mongodb.client.model.Indexes;
 import com.mongodb.client.model.UpdateOptions;
 import com.mongodb.client.model.Variable;
+import com.mongodb.client.model.Accumulators;
+import com.mongodb.client.model.Accumulators.*;
 import com.ongres.benchmark.config.model.Config;
 
 import java.nio.charset.StandardCharsets;
@@ -119,6 +121,7 @@ public class MongoDWBenchmark extends Benchmark {
     logger.info("Importing orders");
     database.createCollection("ord");
     MongoCollection<Document> ord = database.getCollection("ord");
+    String numCol = "price,quantity,beta,vega,theta,vanna,gamma";
     CSVParser.parse(
         MongoDWBenchmark.class.getResourceAsStream("/ord.csv"), 
         StandardCharsets.UTF_8, csvFormatBuilder
@@ -128,7 +131,8 @@ public class MongoDWBenchmark extends Benchmark {
         	ord.insertOne(new Document(
             record.toMap().entrySet().stream()
             .filter(e -> e.getValue() != null)
-            .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()))));
+            .collect(Collectors.toMap(e -> e.getKey(), 
+            		e -> numCol.indexOf(e.getKey())>=0 ? Double.parseDouble(e.getValue()): e.getValue() ))));
         });
     ord.createIndex(Indexes.ascending("order_id"));
     logger.info("Importing product");
@@ -182,6 +186,7 @@ public class MongoDWBenchmark extends Benchmark {
           .build());
       try {
         final Document orders = getOrders(session);
+        final Document group = group(session);
         session.commitTransaction();
       } catch (Exception ex) {
         try {
@@ -211,6 +216,7 @@ public class MongoDWBenchmark extends Benchmark {
   }
 
 
+  // https://www.mongodb.com/docs/drivers/java/sync/current/fundamentals/builders/aggregates/#group
   private List<Bson> getOrderAggregate() {
 	  List<Variable<String>> variables = Arrays.asList(
 			  new Variable<>("pId", "$product_id"),
@@ -233,6 +239,54 @@ public class MongoDWBenchmark extends Benchmark {
 	  return innerJoinLookup;
   }
 
+	private Document group(ClientSession session) {
+		List<Variable<String>> variables = Arrays.asList(new Variable<>("pId", "$product_id"),
+				new Variable<>("cId", "$customer_id"), new Variable<>("sId", "$sales_id"));
+		List<Bson> pPipeline = Arrays.asList(
+				Aggregates.match(Filters.expr(new Document("$and",
+						Arrays.asList(new Document("$eq", Arrays.asList("$product_id", "$$pId")))))),
+				Aggregates.project(Projections.fields(Projections.include("product_name"), Projections.excludeId())));
+		List<Bson> cPipeline = Arrays.asList(
+				Aggregates.match(Filters.expr(new Document("$and",
+						Arrays.asList(new Document("$eq", Arrays.asList("$customer_id", "$$cId")))))),
+				Aggregates.project(Projections.fields(Projections.include("first_name"), Projections.excludeId())));
+		List<Bson> sPipeline = Arrays.asList(
+				Aggregates.match(Filters.expr(
+						new Document("$and", Arrays.asList(new Document("$eq", Arrays.asList("$sales_id", "$$sId")))))),
+				Aggregates.project(Projections.fields(Projections.include("first_name"), Projections.excludeId())));
+		
+		Document groups = new Document()
+				.append("$group", new Document("_id", new Document()
+						.append("prod", "$prod.product_name")
+						.append("custo", "$cust.first_name")
+						.append("sal", "$sale.first_name"))
+						.append("beta", new Document("$sum", "$beta"))
+						.append("gamma", new Document("$sum", "$gamma"))
+						.append("theta", new Document("$sum", "$theta"))
+						.append("vega", new Document("$sum", "$vega"))
+						.append("vanna", new Document("$sum", "$vanna"))
+						.append("quantity", new Document("$sum", "$quantity")));
+		List<Bson> innerJoinLookup = Arrays.asList(Aggregates.lookup("product", variables, pPipeline, "prod"),
+				Aggregates.lookup("customer", variables, cPipeline, "cust"),
+				Aggregates.lookup("sales", variables, sPipeline, "sale"),
+				groups
+				);
+
+		AggregateIterable<Document> orders = database.getCollection("ord").aggregate(session, innerJoinLookup);
+		return orders.first();
+	}
+  
+  private List<Bson> cube() {
+	  return null;
+  }
+  
+  private List<Bson> rollup() {
+	  return null;
+  }
+  
+  private List<Bson> pivot() {
+	  return null;
+  }
 
   @Override
   protected void internalClose() throws Exception {
