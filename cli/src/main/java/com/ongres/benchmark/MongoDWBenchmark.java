@@ -33,8 +33,10 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Aggregates;
 import com.mongodb.client.model.Filters;
+import com.mongodb.client.model.Projections;
 import com.mongodb.client.model.Indexes;
 import com.mongodb.client.model.UpdateOptions;
+import com.mongodb.client.model.Variable;
 import com.ongres.benchmark.config.model.Config;
 
 import java.nio.charset.StandardCharsets;
@@ -44,6 +46,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Random;
@@ -54,6 +57,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVFormat.Builder;
 import org.apache.commons.csv.CSVParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -109,29 +113,32 @@ public class MongoDWBenchmark extends Benchmark {
     database.getCollection("product").drop();
     database.getCollection("customer").drop();
     database.getCollection("sales").drop();
-    CSVFormat csvFormat = CSVFormat.newFormat(';')
-        .withNullString("\\N");
+    Builder csvFormatBuilder = CSVFormat.DEFAULT.builder()
+    		.setDelimiter(",").setNullString("\\N")
+    		.setSkipHeaderRecord(true);
     logger.info("Importing orders");
     database.createCollection("ord");
     MongoCollection<Document> ord = database.getCollection("ord");
     CSVParser.parse(
         MongoDWBenchmark.class.getResourceAsStream("/ord.csv"), 
-        StandardCharsets.UTF_8, csvFormat
-        .withHeader("order_id", "date", "customer_id", "status_id", "total", "sales_id", "channel_id",
-        		"product_id", "price", "quantity", "beta", "vega", "theta", "vanna", "gamma"))
-        .forEach(record -> ord.insertOne(new Document(
+        StandardCharsets.UTF_8, csvFormatBuilder
+        .setHeader("order_id", "date", "customer_id", "status_id", "total", "sales_id", "channel_id",
+        		"product_id", "price", "quantity", "beta", "vega", "theta", "vanna", "gamma").build())
+        .forEach(record -> {
+        	ord.insertOne(new Document(
             record.toMap().entrySet().stream()
             .filter(e -> e.getValue() != null)
-            .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue())))));
+            .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()))));
+        });
     ord.createIndex(Indexes.ascending("order_id"));
     logger.info("Importing product");
     database.createCollection("product");
     MongoCollection<Document> product = database.getCollection("product");
     CSVParser.parse(
         MongoDWBenchmark.class.getResourceAsStream("/product.csv"), 
-        StandardCharsets.UTF_8, csvFormat
-        .withHeader("product_id", "product_name", "product_category", "market_id", "min_price", "price", "product_status",
-        		"cpty_id", "date", "product_description"))
+        StandardCharsets.UTF_8, csvFormatBuilder
+        .setHeader("product_id", "product_name", "product_category", "market_id", "min_price", "price", "product_status",
+        		"cpty_id", "date", "product_description").build())
         .forEach(record -> product.insertOne(new Document(
             record.toMap().entrySet().stream()
             .filter(e -> e.getValue() != null)
@@ -142,8 +149,8 @@ public class MongoDWBenchmark extends Benchmark {
     MongoCollection<Document> sales = database.getCollection("sales");
     CSVParser.parse(
         MongoDWBenchmark.class.getResourceAsStream("/sales.csv"), 
-        StandardCharsets.UTF_8, csvFormat
-        .withHeader("sales_id", "first_name", "last_name", "email", "phone", "hire_date", "job_id", "salary"))
+        StandardCharsets.UTF_8, csvFormatBuilder
+        .setHeader("sales_id", "first_name", "last_name", "email", "phone", "hire_date", "job_id", "salary").build())
         .forEach(record -> sales.insertOne(new Document(
             record.toMap().entrySet().stream()
             .filter(e -> e.getValue() != null)
@@ -153,9 +160,9 @@ public class MongoDWBenchmark extends Benchmark {
     database.createCollection("customer");
     MongoCollection<Document> customer = database.getCollection("customer");
     CSVParser.parse(
-        MongoDWBenchmark.class.getResourceAsStream("/product.csv"), 
-        StandardCharsets.UTF_8, csvFormat
-        .withHeader("customer_id", "first_name", "last_name", "postal_code", "city", "state", "country"))
+        MongoDWBenchmark.class.getResourceAsStream("/customer.csv"), 
+        StandardCharsets.UTF_8, csvFormatBuilder
+        .setHeader("customer_id", "first_name", "last_name", "postal_code", "city", "state", "country").build())
         .forEach(record -> customer.insertOne(new Document(
             record.toMap().entrySet().stream()
             .filter(e -> e.getValue() != null)
@@ -197,27 +204,33 @@ public class MongoDWBenchmark extends Benchmark {
 
 
   private Document getOrders(ClientSession session) {
-    AggregateIterable<Document> schedules = database.getCollection("schedule")
+    AggregateIterable<Document> orders = database.getCollection("ord")
         .aggregate(session,
-            getUserScheduleAggregate());
-    return schedules.first();
+            getOrderAggregate());
+    return orders.first();
   }
 
-  private Document getOrders() {
-    AggregateIterable<Document> schedules = database.getCollection("schedule")
-        .aggregate(
-            getUserScheduleAggregate());
-    return schedules.first();
-  }
 
-  private List<Bson> getUserScheduleAggregate() {
-    return Arrays.asList(
-        Aggregates.match(Filters.eq("schedule_id", 1)),
-        Aggregates.lookup("aircraft", "aircraft", "iata", "aircraft"),
-        Aggregates.project(new Document()
-            .append("schedule_id", 1)
-            .append("duration", 1)
-            .append("capacity", "$aircraft.capacity")));
+  private List<Bson> getOrderAggregate() {
+	  List<Variable<String>> variables = Arrays.asList(
+			  new Variable<>("pId", "$product_id"),
+			  new Variable<>("cId", "$customer_id"),
+			  new Variable<>("sId", "$sales_id"));
+	  List<Bson> pPipeline = Arrays.asList(
+			  Aggregates.match(Filters.expr(new Document("$and", Arrays.asList(new Document("$eq", Arrays.asList("$product_id", "$$pId")) )))),
+			  Aggregates.project(Projections.fields(Projections.include("product_name"), Projections.excludeId()))			  );
+	  List<Bson> cPipeline = Arrays.asList(
+			  Aggregates.match(Filters.expr(new Document("$and", Arrays.asList(new Document("$eq", Arrays.asList("$customer_id", "$$cId")) )))),
+			  Aggregates.project(Projections.fields(Projections.include("first_name"), Projections.excludeId()))			  );
+	  List<Bson> sPipeline = Arrays.asList(
+			  Aggregates.match(Filters.expr(new Document("$and", Arrays.asList(new Document("$eq", Arrays.asList("$sales_id", "$$sId")) )))),
+			  Aggregates.project(Projections.fields(Projections.include("first_name"), Projections.excludeId()))			  );	  
+	  List<Bson> innerJoinLookup = Arrays.asList(
+			  Aggregates.lookup("product", variables, pPipeline, "prod"),
+			  Aggregates.lookup("customer", variables, cPipeline, "cust"),
+			  Aggregates.lookup("sales", variables, sPipeline, "sale")
+			  );
+	  return innerJoinLookup;
   }
 
 
