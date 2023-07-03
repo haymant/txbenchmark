@@ -92,7 +92,7 @@ public class PostgresDWBenchmark extends Benchmark {
 			statement.execute("drop table if exists sales");
 
 			logger.info("Creating schema");
-			statement.execute("create extension if not exists \"uuid-ossp\"");
+			statement.execute("CREATE EXTENSION IF NOT EXISTS tablefunc");
 			statement.execute("create table product (" + "product_id integer PRIMARY KEY, " + "product_name text, "
 					+ "product_category varchar(3), " + "market_id text, " + "min_price integer, " + "price integer, "
 					+ "product_status text, " + "cpty_id integer, " + "date timestamp without time zone, "
@@ -140,6 +140,7 @@ public class PostgresDWBenchmark extends Benchmark {
 				final Document port = groupset(connection);
 				final Document cube = cube(connection);
 				final Document rollup = rollup(connection);
+				final Document pivot = pivot(connection);
 				TimeUnit.SECONDS.sleep(config.getBookingSleep());
 				if (!config.isDisableTransaction()) {
 					connection.commit();
@@ -226,6 +227,22 @@ public class PostgresDWBenchmark extends Benchmark {
 			return new Document().append("customer", resultSet.getString("customer"))
 					.append("product", resultSet.getString("product")).append("sales", resultSet.getString("sales"))
 					.append("px", resultSet.getString("px"));
+		}
+	}
+	
+	// pivot to get products sold by each sales
+	private Document pivot(Connection connection) throws SQLException {
+		try (Statement statement = connection.createStatement();
+				ResultSet resultSet = statement.executeQuery(
+						" select * from crosstab('"
+						+ "select product.product_name as product, sales.first_name as sales, "
+						+ "ord.quantity as amount from ord inner join sales on (sales.sales_id = ord.sales_id) "
+						+ "inner join product on (product.product_id = ord.product_id) order by 1, 2') as "
+						+ "sales (product text, sales1 real, sales2 real, sales3 real)")) {
+			Preconditions.checkState(resultSet.next());
+			return new Document().append("product", resultSet.getString("product"))
+					.append("sales1", resultSet.getString("sales1")).append("sales2", resultSet.getString("sales2"))
+					.append("sales3", resultSet.getString("sales3"));
 		}
 	}
 

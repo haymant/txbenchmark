@@ -160,6 +160,9 @@ public class App  extends Options implements Callable<Void> {
 		case "pDW":
 			benchmark = createPostgresDWBenchmark(closer);
 			break;
+		case "mDW":
+			benchmark = createMongoDWBenchmark(closer);
+			break;			
 		default:
 			throw new IllegalArgumentException(
 					"Unknown benchmark target type " + getConfig().getTargetType() + ". Must be postgres/pDW/mongo/mDW");
@@ -396,6 +399,29 @@ public class App  extends Options implements Callable<Void> {
     closer.register(() -> Unchecked.runnable(() -> benchmark.close()).run());
     return new BenchmarkRunner(benchmark);
   }
+  
+  private BenchmarkRunner createMongoDWBenchmark(Closer closer) {
+	    MongoClient client = MongoClients.create(MongoClientSettings.builder()
+	        .applyConnectionString(new ConnectionString("mongodb://"
+	            + (getConfig().getTarget().getDatabase().getUser().isEmpty() ? "" 
+	                : getConfig().getTarget().getDatabase().getUser() 
+	                + ":" + getConfig().getTarget().getDatabase().getPassword()
+	                + "@")
+	            + getConfig().getTarget().getDatabase().getHost() 
+	            + ":" + getConfig().getTarget().getDatabase().getPort() + "/benchmark")  )
+	        .applyToConnectionPoolSettings(builder -> builder
+	            .minSize(getConfig().getMinConnections())
+	            .maxSize(getConfig().getMaxConnections())
+	            .maxWaitTime(getConfig().getConnectionWaitTimeoutAsDuration().toMillis(), 
+	                TimeUnit.MILLISECONDS)
+	            .maxConnectionIdleTime(getConfig().getConnectionIdleTimeoutAsDuration().toMillis(), 
+	                TimeUnit.MILLISECONDS))
+	        .build());
+	    MongoDWBenchmark benchmark = MongoDWBenchmark.create(client, 
+	        getConfig());
+	    closer.register(() -> Unchecked.runnable(() -> benchmark.close()).run());
+	    return new BenchmarkRunner(benchmark);
+	  }
 
   private void updateLogLevel(Closer closer) {
     if (getConfig().getLogLevel() != null) {
