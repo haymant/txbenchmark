@@ -25,19 +25,10 @@ import com.ongres.benchmark.config.model.Config;
 import com.ongres.benchmark.jdbc.ConnectionSupplier;
 
 import java.sql.Connection;
-import java.sql.Date;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Timestamp;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
-import java.util.Optional;
-import java.util.Random;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
+
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -49,12 +40,9 @@ import org.postgresql.util.PSQLException;
 
 public class PostgresDWBenchmark extends Benchmark {
 
-	private static final int MAX_SCHEDULE_ID = 14185;
-
 	private final Logger logger = LogManager.getLogger();
 
-	private final AtomicLong idGenerator = new AtomicLong();
-	private final Random random = new Random();
+
 	private final ConnectionSupplier connectionSupplier;
 	private final Config config;
 
@@ -136,12 +124,12 @@ public class PostgresDWBenchmark extends Benchmark {
 	private void userOperation() throws Exception {
 		try (Connection connection = connectionSupplier.get()) {
 			try {
-				final Document orders = getOrders(connection);
-				final Document port = groupset(connection);
-				final Document cube = cube(connection);
-				final Document rollup = rollup(connection);
-				final Document pivot = pivot(connection);
-				TimeUnit.SECONDS.sleep(config.getBookingSleep());
+				getOrders(connection);
+				groupset(connection);
+				cube(connection);
+				rollup(connection);
+				pivot(connection);
+				
 				if (!config.isDisableTransaction()) {
 					connection.commit();
 				}

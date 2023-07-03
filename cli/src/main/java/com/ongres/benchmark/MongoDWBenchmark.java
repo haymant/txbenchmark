@@ -21,7 +21,6 @@
 package com.ongres.benchmark;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.mongodb.ClientSessionOptions;
 import com.mongodb.MongoCommandException;
 import com.mongodb.MongoException;
@@ -35,28 +34,15 @@ import com.mongodb.client.model.Aggregates;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Projections;
 import com.mongodb.client.model.Indexes;
-import com.mongodb.client.model.UpdateOptions;
 import com.mongodb.client.model.Variable;
-import com.mongodb.client.model.Accumulators;
-import com.mongodb.client.model.Accumulators.*;
 import com.ongres.benchmark.config.model.Config;
 
 import java.nio.charset.StandardCharsets;
-import java.sql.Date;
-import java.sql.Timestamp;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.Random;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVFormat.Builder;
@@ -69,12 +55,9 @@ import org.jooq.lambda.Unchecked;
 
 public class MongoDWBenchmark extends Benchmark {
 
-  private static final int MAX_SCHEDULE_ID = 14185;
 
   private final Logger logger = LogManager.getLogger();
 
-  private final AtomicLong idGenerator = new AtomicLong(0);
-  private final Random random = new Random();
   private final MongoClient client;
   private final MongoDatabase database;
   private final Config config;
@@ -185,8 +168,11 @@ public class MongoDWBenchmark extends Benchmark {
           .writeConcern(config.getMongoWriteConcernAsWriteConcern())
           .build());
       try {
-        final Document orders = getOrders(session);
-        final Document group = group(session);
+        getOrders(session);
+        //group(session);
+    	rollup(session);
+    	cube(session);
+        //pivot(session);
         session.commitTransaction();
       } catch (Exception ex) {
         try {
@@ -276,17 +262,37 @@ public class MongoDWBenchmark extends Benchmark {
 		return orders.first();
 	}
   
-  private List<Bson> cube() {
-	  return null;
-  }
+	private Document cube(ClientSession session) {
+		return null;
+	}
+
+	private Document rollup(ClientSession session) {
+		return null;
+	}
   
-  private List<Bson> rollup() {
-	  return null;
-  }
-  
-  private List<Bson> pivot() {
-	  return null;
-  }
+	private Document pivot(ClientSession session) {
+		List<Variable<String>> variables = Arrays.asList(new Variable<>("pId", "$product_id"),
+				new Variable<>("sId", "$sales_id"));
+		List<Bson> pPipeline = Arrays.asList(
+				Aggregates.match(Filters.expr(new Document("$and",
+						Arrays.asList(new Document("$eq", Arrays.asList("$product_id", "$$pId")))))),
+				Aggregates.project(Projections.fields(Projections.include("product_name"), Projections.excludeId())));
+		List<Bson> sPipeline = Arrays.asList(
+				Aggregates.match(Filters.expr(
+						new Document("$and", Arrays.asList(new Document("$eq", Arrays.asList("$sales_id", "$$sId")))))),
+				Aggregates.project(Projections.fields(Projections.include("first_name"), Projections.excludeId())));
+		Document groups = new Document().append("$group",
+				new Document("_id", new Document().append("prod", "$prod.product_name")
+						.append("sal", "$sale.first_name"))
+						.append("items", new Document("$addToSet", 
+								new Document().append("name", "$prod.product_name")
+								.append("value", "$sale.first_name"))));
+		Document project = new Document("$project", new Document("tmp", new Document("$arrayToObject", new Document("$zip", ""))));
+		List<Bson> innerJoinLookup = Arrays.asList(Aggregates.lookup("product", variables, pPipeline, "prod"),
+				Aggregates.lookup("sales", variables, sPipeline, "sale"), groups);
+		AggregateIterable<Document> orders = database.getCollection("ord").aggregate(session, innerJoinLookup);
+		return orders.first();
+	}
 
   @Override
   protected void internalClose() throws Exception {

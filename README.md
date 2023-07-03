@@ -263,3 +263,189 @@ sudo sysctl -w vm.max_map_count=128000
 sudo sysctl -w net.core.somaxconn=65535
 sudo systemctl restart mongod
 ```
+
+# Queries
+
+## Simple
+
+### Postgres
+
+```sql
+select * from ord inner join customer on (customer.customer_id = ord.customer_id)
+  inner join sales on (sales.sales_id = ord.sales_id) 
+  inner join product on (product.product_id = ord.product_id) limit 100;
+```
+
+### Mongo
+
+```json
+[
+   {
+      "$lookup":{
+         "from":"product",
+         "let":{
+            "pId":"$product_id",
+            "cId":"$customer_id",
+            "sId":"$sales_id"
+         },
+         "pipeline":[
+            {
+               "$match":{
+                  "$expr":{
+                     "$and":[
+                        {
+                           "$eq":[
+                              "$product_id",
+                              "$$pId"
+                           ]
+                        }
+                     ]
+                  }
+               }
+            },
+            {
+               "$project":{
+                  "product_name":1,
+                  "_id":0
+               }
+            }
+         ],
+         "as":"prod"
+      }
+   },
+   {
+      "$lookup":{
+         "from":"customer",
+         "let":{
+            "pId":"$product_id",
+            "cId":"$customer_id",
+            "sId":"$sales_id"
+         },
+         "pipeline":[
+            {
+               "$match":{
+                  "$expr":{
+                     "$and":[
+                        {
+                           "$eq":[
+                              "$customer_id",
+                              "$$cId"
+                           ]
+                        }
+                     ]
+                  }
+               }
+            },
+            {
+               "$project":{
+                  "first_name":1,
+                  "_id":0
+               }
+            }
+         ],
+         "as":"cust"
+      }
+   },
+   {
+      "$lookup":{
+         "from":"sales",
+         "let":{
+            "pId":"$product_id",
+            "cId":"$customer_id",
+            "sId":"$sales_id"
+         },
+         "pipeline":[
+            {
+               "$match":{
+                  "$expr":{
+                     "$and":[
+                        {
+                           "$eq":[
+                              "$sales_id",
+                              "$$sId"
+                           ]
+                        }
+                     ]
+                  }
+               }
+            },
+            {
+               "$project":{
+                  "first_name":1,
+                  "_id":0
+               }
+            }
+         ],
+         "as":"sale"
+      }
+   }
+]
+```
+
+## GroupSet
+
+### Postgres
+
+```sql
+select customer.first_name as customer, product.product_name as product, sales.first_name as sales, 
+  sum(ord.price) as px, sum(ord.quantity) as amount, sum(ord.beta) as beta, 
+  sum(ord.gamma) as gamma, sum(ord.theta) as theta, sum(ord.vega) as vega, sum(ord.vanna) as vanna
+  from ord    inner join customer on (customer.customer_id = ord.customer_id) 
+  inner join sales on (sales.sales_id = ord.sales_id)             
+  inner join product on (product.product_id = ord.product_id)     
+  group by grouping sets (customer.first_name, product.product_name, sales.first_name);
+```
+
+### Mongo
+
+```json
+
+```
+
+## Rollup
+
+### Postgres
+```sql
+select customer.first_name as customer, product.product_name as product, sales.first_name as sales, 
+  sum(ord.price) as px, sum(ord.quantity) as amount, sum(ord.beta) as beta, 
+  sum(ord.gamma) as gamma, sum(ord.theta) as theta, sum(ord.vega) as vega, sum(ord.vanna) as vanna
+  from ord    inner join customer on (customer.customer_id = ord.customer_id) 
+  inner join sales on (sales.sales_id = ord.sales_id)             
+  inner join product on (product.product_id = ord.product_id)     
+  group by rollup (customer.first_name, product.product_name, sales.first_name);
+```
+
+### Mongo
+```json
+```
+
+## Cube
+
+### Postgres
+```sql
+select customer.first_name as customer, product.product_name as product, sales.first_name as sales, 
+  sum(ord.price) as px, sum(ord.quantity) as amount, sum(ord.beta) as beta, 
+  sum(ord.gamma) as gamma, sum(ord.theta) as theta, sum(ord.vega) as vega, sum(ord.vanna) as vanna
+  from ord    inner join customer on (customer.customer_id = ord.customer_id) 
+  inner join sales on (sales.sales_id = ord.sales_id)             
+  inner join product on (product.product_id = ord.product_id)     
+  group by cube (customer.first_name, product.product_name, sales.first_name);
+```
+
+### Mongo
+```json
+```
+
+## Pivot
+
+### Postgres
+```sql
+select * from crosstab('select product.product_name as product, sales.first_name as sales, 
+ ord.quantity as amount from ord inner join sales on (sales.sales_id = ord.sales_id) 
+ inner join product on (product.product_id = ord.product_id) order by 1, 2') as 
+ sales (product text, sales1 real, sales2 real, sales3 real);
+```
+
+### Mongo
+```json
+```
