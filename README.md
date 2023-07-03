@@ -280,106 +280,199 @@ select * from ord inner join customer on (customer.customer_id = ord.customer_id
 
 ```json
 [
-   {
-      "$lookup":{
-         "from":"product",
-         "let":{
-            "pId":"$product_id",
-            "cId":"$customer_id",
-            "sId":"$sales_id"
-         },
-         "pipeline":[
-            {
-               "$match":{
-                  "$expr":{
-                     "$and":[
-                        {
-                           "$eq":[
-                              "$product_id",
-                              "$$pId"
-                           ]
-                        }
-                     ]
-                  }
-               }
-            },
-            {
-               "$project":{
-                  "product_name":1,
-                  "_id":0
-               }
+  {
+    "$lookup":{
+      "from":"product",
+      "let":{
+        "pId":"$product_id",
+        "cId":"$customer_id",
+        "sId":"$sales_id"
+      },
+      "pipeline":[
+        {
+          "$match":{
+            "$expr":{
+              "$and":[
+                {
+                  "$eq":[
+                    "$product_id",
+                    "$$pId"
+                  ]
+                }
+              ]
             }
-         ],
-         "as":"prod"
-      }
-   },
-   {
-      "$lookup":{
-         "from":"customer",
-         "let":{
-            "pId":"$product_id",
-            "cId":"$customer_id",
-            "sId":"$sales_id"
-         },
-         "pipeline":[
-            {
-               "$match":{
-                  "$expr":{
-                     "$and":[
-                        {
-                           "$eq":[
-                              "$customer_id",
-                              "$$cId"
-                           ]
-                        }
-                     ]
-                  }
-               }
-            },
-            {
-               "$project":{
-                  "first_name":1,
-                  "_id":0
-               }
+          }
+        },
+        {
+          "$project":{
+            "product_name":1,
+            "_id":0
+          }
+        }
+      ],
+      "as":"prod"
+    }
+  },
+  {
+    "$lookup":{
+      "from":"customer",
+      "let":{
+        "pId":"$product_id",
+        "cId":"$customer_id",
+        "sId":"$sales_id"
+      },
+      "pipeline":[
+        {
+          "$match":{
+            "$expr":{
+              "$and":[
+                {
+                  "$eq":[
+                    "$customer_id",
+                    "$$cId"
+                  ]
+                }
+              ]
             }
-         ],
-         "as":"cust"
-      }
-   },
-   {
-      "$lookup":{
-         "from":"sales",
-         "let":{
-            "pId":"$product_id",
-            "cId":"$customer_id",
-            "sId":"$sales_id"
-         },
-         "pipeline":[
-            {
-               "$match":{
-                  "$expr":{
-                     "$and":[
-                        {
-                           "$eq":[
-                              "$sales_id",
-                              "$$sId"
-                           ]
-                        }
-                     ]
-                  }
-               }
-            },
-            {
-               "$project":{
-                  "first_name":1,
-                  "_id":0
-               }
+          }
+        },
+        {
+          "$project":{
+            "first_name":1,
+            "_id":0
+          }
+        }
+      ],
+      "as":"cust"
+    }
+  },
+  {
+    "$lookup":{
+      "from":"sales",
+      "let":{
+        "pId":"$product_id",
+        "cId":"$customer_id",
+        "sId":"$sales_id"
+      },
+      "pipeline":[
+        {
+          "$match":{
+            "$expr":{
+              "$and":[
+                {
+                  "$eq":[
+                    "$sales_id",
+                    "$$sId"
+                  ]
+                }
+              ]
             }
-         ],
-         "as":"sale"
-      }
-   }
+          }
+        },
+        {
+          "$project":{
+            "first_name":1,
+            "_id":0
+          }
+        }
+      ],
+      "as":"sale"
+    }
+  },
+  {
+    "$limit":100
+  }
 ]
+```
+
+## Group By
+
+### Postgres
+
+```sql
+select customer.first_name as customer, product.product_name as product, sales.first_name as sales, 
+  sum(ord.price) as px, sum(ord.quantity) as amount, sum(ord.beta) as beta, 
+  sum(ord.gamma) as gamma, sum(ord.theta) as theta, sum(ord.vega) as vega, sum(ord.vanna) as vanna
+  from ord    inner join customer on (customer.customer_id = ord.customer_id) 
+  inner join sales on (sales.sales_id = ord.sales_id)             
+  inner join product on (product.product_id = ord.product_id)     
+  group by customer.first_name, product.product_name, sales.first_name
+  order by customer, product, sales;
+```
+
+### Mongo
+
+```json
+[
+  {
+    "$lookup":{
+      "from":"product",
+      "localField":"product_id",
+      "foreignField":"product_id",
+      "as":"prod"
+    }
+  },
+  {
+    "$unwind":"$prod"
+  },
+  {
+    "$lookup":{
+      "from":"customer",
+      "localField":"customer_id",
+      "foreignField":"customer_id",
+      "as":"cust"
+    }
+  },
+  {
+    "$unwind":"$cust"
+  },
+  {
+    "$lookup":{
+      "from":"sales",
+      "localField":"sales_id",
+      "foreignField":"sales_id",
+      "as":"sale"
+    }
+  },
+  {
+    "$unwind":"$sale"
+  },
+  {
+    "$project":{
+      "_id":1,
+      "customer":"$cust.first_name",
+      "product":"$prod.product_name",
+      "sales":"$sale.first_name",
+      "price":1,
+      "amount":1,
+      "beta":1,
+      "gamma":1,
+      "theta":1,
+      "vega":1,
+      "vanna":1
+    }
+  },
+  {
+    "$group":{
+      "_id":{
+        "custo":"$customer",
+        "produ":"$product",
+        "sal":"$sales"
+      },
+      "beta":{
+        "$sum":"$beta"
+      }
+    }
+  },
+  {
+    "$sort":{
+      "_id.custo":1,
+      "_id.produ":1,
+      "_id.sal":1
+    }
+  }
+]
+
 ```
 
 ## GroupSet
@@ -399,6 +492,7 @@ select customer.first_name as customer, product.product_name as product, sales.f
 ### Mongo
 
 ```json
+[{"$lookup":{"from":"product","localField":"product_id","foreignField":"product_id","as":"prod"}},{"$unwind":"$prod"},{"$lookup":{"from":"customer","localField":"customer_id","foreignField":"customer_id","as":"cust"}},{"$unwind":"$cust"},{"$lookup":{"from":"sales","localField":"sales_id","foreignField":"sales_id","as":"sale"}},{"$unwind":"$sale"},{"$project":{"_id":1,"customer":"$cust.first_name","product":"$prod.product_name","sales":"$sale.first_name","price":1,"amount":1,"beta":1,"gamma":1,"theta":1,"vega":1,"vanna":1}},{"$group":{"_id":{"custo":"$customer","produ":"$product","sal":"$sales"}}}]);
 
 ```
 

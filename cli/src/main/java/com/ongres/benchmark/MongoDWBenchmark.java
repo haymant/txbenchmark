@@ -168,8 +168,8 @@ public class MongoDWBenchmark extends Benchmark {
           .writeConcern(config.getMongoWriteConcernAsWriteConcern())
           .build());
       try {
-        getOrders(session);
-        //group(session);
+        //getOrders(session);
+        group(session);
     	rollup(session);
     	cube(session);
         //pivot(session);
@@ -243,8 +243,8 @@ public class MongoDWBenchmark extends Benchmark {
 		
 		Document groups = new Document()
 				.append("$group", new Document("_id", new Document()
-						.append("prod", "$prod.product_name")
 						.append("custo", "$cust.first_name")
+						.append("prod", "$prod.product_name")						
 						.append("sal", "$sale.first_name"))
 						.append("beta", new Document("$sum", "$beta"))
 						.append("gamma", new Document("$sum", "$gamma"))
